@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" width="200" height="300">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6E97C7"/>
+      <stop offset="100%" stop-color="#4E7099"/>
+    </linearGradient>
+    <clipPath id="silhouette">
+      <path d="M30,4 L170,4 L180,92 L166,296 L114,296 L100,146 L86,296 L34,296 L20,92 Z"/>
+    </clipPath>
+  </defs>
+  <path d="M30,4 L170,4 L180,92 L166,296 L114,296 L100,146 L86,296 L34,296 L20,92 Z" fill="url(#g)"/>
+  <g clip-path="url(#silhouette)">
+  <path d="M30,4 L170,4 L172,28 L28,28 Z" fill="#5B83B0"/>
+  <path d="M46,40 L82,40 L78,74 L50,74 Z" fill="#5B83B0" opacity="0.8"/>
+  <path d="M118,40 L154,40 L150,74 L122,74 Z" fill="#5B83B0" opacity="0.8"/>
+  </g>
+  <path d="M30,4 L170,4 L180,92 L166,296 L114,296 L100,146 L86,296 L34,296 L20,92 Z" fill="none" stroke="#4E7099" stroke-width="2" stroke-linejoin="round"/>
+</svg>

@@ -1,76 +1,38 @@
-import type { NextConfig } from 'next'
+/**
+ * Config de Next.
+ *
+ * En CommonJS a propósito: `package.json` no declara `"type": "module"`, y Next
+ * resuelve `next.config.js` antes que `.mjs`/`.ts`. El archivo original tenía
+ * sintaxis TypeScript (`import type`, `const nextConfig: NextConfig`) dentro de
+ * un `.js`, así que Node fallaba al parsearlo y la app no arrancaba.
+ *
+ * @type {import('next').NextConfig}
+ */
+const nextConfig = {
+  reactStrictMode: true,
 
-const nextConfig: NextConfig = {
-  // ===== Imágenes =====
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-      {
-        protocol: 'http',
-        hostname: 'localhost',
-      },
-    ],
-    formats: ['image/webp', 'image/avif'],
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    formats: ['image/webp'],
   },
 
-  // ===== Webpack =====
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        path: false,
-        crypto: false,
-        stream: false,
-        util: false,
-      }
-    }
-    return config
-  },
-
-  // ===== Experimental Features =====
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
 
-  // ===== Headers de Seguridad =====
   async headers() {
     return [
       {
         source: '/:path*',
         headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(self), microphone=(self)',
-          },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // El probador necesita la cámara; el micrófono no se usa nunca.
+          { key: 'Permissions-Policy', value: 'camera=(self), microphone=()' },
         ],
       },
     ]
   },
-
-  // ===== Output =====
-  output: 'standalone',
 }
 
-export default nextConfig
+module.exports = nextConfig

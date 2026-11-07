@@ -1,301 +1,96 @@
-# E-commerce Virtual Try-On
+# TryOnIA — Probador virtual local
 
-Este es un proyecto completo de **Probador Virtual en Tiempo Real** para una tienda de ropa en línea, inspirado en soluciones como Anywear (Decart AI).
+E-commerce con probador virtual en tiempo real. La detección de cuerpo y la
+composición de la prenda ocurren **en el navegador**: no hay API key, no hace
+falta GPU dedicada y ni el vídeo ni los fotogramas salen de tu equipo.
 
-## ✨ Características Principales
-
-- **Probador Virtual en Tiempo Real**: Captura de vídeo en vivo mediante `navigator.mediaDevices.getUserMedia()`
-- **IA de Virtual Try-On**: Integración con APIs como Replicate, Fashn.ai o Decart AI
-- **Selector de Prendas**: Hot-swapping de artículos sin cerrar la cámara
-- **Guía Visual Overlay**: Marco de posicionamiento interactivo en canvas
-- **Carrito de Compras**: Gestión de estado global con Zustand
-- **Interfaz Moderna**: Diseño limpio con Tailwind CSS y componentes React
-
-## 📋 Stack Tecnológico
-
-### Frontend
-- **Next.js 14** (App Router)
-- **React 18**
-- **TypeScript**
-- **Tailwind CSS**
-- **Zustand** (State Management)
-- **Lucide React** (Icons)
-
-### APIs & Servicios
-- **Replicate API** - Virtual Try-On con modelos IDM-VTON
-- **Fashn.ai API** - VTON optimizado para baja latencia
-- **Decart AI / Anywear** - API profesional de Virtual Try-On
-- **Mock Client** - Para desarrollo y testing
-
-## 📁 Estructura del Proyecto
-
-```
-ecomer-virtual-tryon/
-├── app/
-│   ├── layout.tsx              # Layout raíz con metadata
-│   ├── page.tsx                # Página de inicio con catálogo
-│   └── globals.css             # Estilos globales
-├── components/
-│   ├── VirtualTryOn/
-│   │   ├── VirtualTryOnModal.tsx       # Componente principal
-│   │   ├── CameraFeed.tsx              # Captura de vídeo
-│   │   ├── GuidanceOverlay.tsx         # Overlay de guía visual
-│   │   ├── ProductSelector.tsx         # Selector de prendas
-│   │   └── CartButton.tsx              # Botón flotante del carrito
-│   └── Common/
-│       └── (componentes comunes)
-├── lib/
-│   ├── api/
-│   │   ├── vtonClient.ts       # Clase base abstracta
-│   │   ├── mockVtonClient.ts   # Cliente Mock
-│   │   ├── replicateClient.ts  # Integración Replicate
-│   │   └── fashnClient.ts      # Integración Fashn.ai
-│   ├── hooks/
-│   │   ├── useCamera.ts        # Hook para cámara web
-│   │   ├── useVirtualTryOn.ts  # Hook para VTON
-│   │   └── useCart.ts          # Hook del carrito (Zustand)
-│   ├── constants/
-│   │   ├── products.ts         # Catálogo ficticio
-│   │   ├── vtonConfig.ts       # Configuración de VTON
-│   │   └── uiConfig.ts         # Configuración UI
-│   └── types/
-│       └── index.ts            # Tipos TypeScript
-├── public/
-│   └── images/clothes/         # Imágenes de prendas
-├── styles/
-│   └── globals.css             # Tailwind + custom styles
-├── package.json
-├── tsconfig.json
-├── tailwind.config.js
-├── next.config.js
-└── .env.local                  # Variables de entorno
-```
-
-## 🚀 Instalación
-
-### 1. Clonar o preparar el proyecto
+## Arrancar
 
 ```bash
-cd ecomer-virtual-tryon
+npm install          # el postinstall prepara el motor local (WASM + modelo, ~5 MB)
+npm run dev          # http://localhost:3000
 ```
 
-### 2. Instalar dependencias
+Abre **http://localhost:3000**, no `127.0.0.1` ni una IP de red: `getUserMedia`
+sólo funciona en contextos seguros (HTTPS o `localhost`).
+
+Si el `postinstall` no pudo descargar el modelo (sin internet en ese momento):
 
 ```bash
-npm install
+npm run setup:local-ai
 ```
 
-### 3. Configurar variables de entorno
+Sin el modelo el probador sigue abriendo, pero degradado al motor `mock`
+(prenda en posición fija) y avisándolo en pantalla.
 
-Crea un archivo `.env.local` con:
+## Comandos
 
-```env
-# VTON Provider (mock, replicate, fashn, decart)
-NEXT_PUBLIC_VTON_PROVIDER=mock
+| Comando | Qué hace |
+|---|---|
+| `npm run dev` | Servidor de desarrollo |
+| `npm test` | Tests del dominio y de la geometría del probador (sin navegador) |
+| `npm run type-check` | TypeScript en modo estricto |
+| `npm run lint` | ESLint |
+| `npm run setup:local-ai` | Descarga/copia los assets del motor local |
+| `npm run generate:garments` | Regenera las siluetas de `public/garments` |
 
-# Replicate (opcional)
-REPLICATE_API_KEY=your_replicate_key
-VTON_MODEL_ID=sczhou/iidm-vton:8ee0c3c9a0fa3dd1e8b38f37e8a0fdb78c63cbea2a8fac8b8b2c5c8a9e8b8b8b
+## Cómo usarlo
 
-# Fashn.ai (opcional)
-FASHN_API_KEY=your_fashn_key
+1. Pulsa **Probarte** en cualquier prenda (o **Abrir probador virtual**).
+2. Acepta el permiso de cámara.
+3. Colócate de forma que **se te vean hombros y cintura** dentro del marco. El
+   motor necesita ambos para calcular la escala; si sólo se te ve la cara, la
+   insignia pasa a `SIN CUERPO` y no se superpone nada.
+4. Cambia de prenda con las miniaturas, sin cerrar la cámara.
 
-# Decart AI (opcional)
-DECART_API_KEY=your_decart_key
-```
+La insignia de la cabecera indica el estado real: `CARGANDO` (modelo),
+`EN VIVO` (cuerpo detectado), `SIN CUERPO`, `ERROR`. Debajo del vídeo se ven los
+fps y los ms por fotograma.
 
-### 4. Ejecutar en desarrollo
+El botón **Carrito** abre un panel con las líneas, cantidades editables y el
+total. El carrito persiste en `localStorage`. **No hay checkout**: el botón de
+finalizar compra está desactivado a propósito en esta versión local.
 
-```bash
-npm run dev
-```
+## Motores
 
-Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+Se elige con `NEXT_PUBLIC_TRYON_ENGINE` en `.env.local` (ver `.env.example`):
 
-## 🎮 Uso
+- **`local-pose`** (por defecto) — MediaPipe en el navegador, tiempo real, sin red.
+- **`mock`** — prenda en posición fija, sin IA. Útil para trabajar la UI.
+- **`remote`** — difusión real (Fashn) a través de `/api/try-on`. Requiere API
+  key y **no es tiempo real**: son segundos por pasada, así que el flujo cambia
+  a «capturar → procesar → ver resultado».
 
-1. **Haz clic en "Abrir Probador Virtual"** o en el botón "Probarte" de cualquier prenda
-2. **Permite acceso a la cámara** cuando tu navegador lo solicite
-3. **Posiciónate dentro del marco guía** (overlay naranja)
-4. **Selecciona una prenda** del panel derecho
-5. **Observa la transformación en vivo** - la IA aplica la prenda sobre ti
-6. **Cambia de prendas** con hot-swapping sin cerrar la cámara
-7. **Añade al carrito** mediante el botón flotante naranja
+### Lo que el motor local sí y no hace
 
-## 🔗 Integración de APIs
+Sigue tu cuerpo, escala la prenda con la distancia a la cámara y acompaña la
+inclinación del torso. **No es difusión**: deforma la prenda sobre ti en vez de
+re-renderizarla, así que no hay drapeado ni sombras reales, y si cruzas los
+brazos la prenda se dibuja encima. Para fotorrealismo hace falta difusión —
+motor `remote`, o GPU propia con ComfyUI (CatVTON/IDM-VTON).
 
-### Opción A: Mock (Desarrollo)
-
-El cliente Mock simula una API de VTON. Perfecto para desarrollo sin costos:
-
-```typescript
-import { MockVTONClient } from '@/lib/api/mockVtonClient'
-
-const client = new MockVTONClient(300) // 300ms de latencia simulada
-```
-
-### Opción B: Replicate
-
-Usa modelos como `sczhou/iidm-vton`:
-
-```env
-NEXT_PUBLIC_VTON_PROVIDER=replicate
-REPLICATE_API_KEY=your_token
-```
-
-[Documentación de Replicate](https://replicate.com/)
-
-### Opción C: Fashn.ai
-
-API especializada en VTON con baja latencia:
-
-```env
-NEXT_PUBLIC_VTON_PROVIDER=fashn
-FASHN_API_KEY=your_key
-```
-
-[Documentación de Fashn.ai](https://fashn.ai/)
-
-### Opción D: Decart AI / Anywear
-
-Solución empresarial profesional:
-
-```env
-NEXT_PUBLIC_VTON_PROVIDER=decart
-DECART_API_KEY=your_key
-```
-
-## 📊 Estados de la Aplicación
+## Estructura
 
 ```
-┌─────────────┐
-│    idle     │ (Inicial)
-└──────┬──────┘
-       │ startCamera()
-┌──────▼─────────────────────┐
-│      loading / active       │
-└──────┬──────────────────────┘
-       │ Se capturan frames
-┌──────▼──────────────────┐
-│  processing_frame       │ (Enviando a IA)
-└──────┬───────────────────┘
-       │ Respuesta recibida
-┌──────▼──────────────────┐
-│   stream_active         │ (En vivo)
-└─────────────────────────┘
-       │ (Loop continuo)
+app/            rutas, layout y /api/try-on (proxy del motor remoto)
+components/     UI (shop/ y VirtualTryOn/)
+lib/domain/     núcleo puro: prendas, carrito, estados
+lib/engines/    motores de try-on + geometría de pose
+lib/hooks/      useCamera, useTryOn, useCart
+lib/server/     credenciales del proveedor remoto (sólo servidor)
+tests/          tests del núcleo puro
+scripts/        preparación de assets
 ```
 
-## 🎨 Personalización
+Los detalles de diseño y el por qué de cada decisión están en
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-### Cambiar colores
+**Si retomas el proyecto, empieza por [ESTADO.md](ESTADO.md)**: documenta qué
+está verificado, qué no lo está, y qué queda pendiente.
 
-Edita `lib/constants/uiConfig.ts` y `tailwind.config.js`:
+## Privacidad
 
-```typescript
-colors: {
-  primary: '#0F172A',
-  accent: '#F97316',  // Naranja
-  success: '#10B981',
-}
-```
-
-### Ajustar latencia simulada
-
-```typescript
-const client = new MockVTONClient(500) // 500ms en lugar de 300ms
-client.setProcessingDelay(800)
-```
-
-### Modificar resolución de cámara
-
-```typescript
-const camera = useCamera({ width: 1280, height: 720 })
-```
-
-## 🔐 Seguridad
-
-- ✅ Variables de entorno protegidas en `.env.local`
-- ✅ Claves de API nunca expuestas en el cliente (usar proxy backend en producción)
-- ✅ CORS configurado correctamente en APIs de terceros
-- ✅ Validación de datos en ambos lados
-
-## ⚡ Optimizaciones de Rendimiento
-
-- **Frame Rate Control**: Limita FPS para reducir carga
-- **Lazy Loading**: Carga de componentes bajo demanda
-- **Canvas Optimization**: Renderizado eficiente en canvas
-- **Buffer de Frames**: Previene acumulación de latencia
-- **WebP/JPEG Compression**: Compresión automática de imágenes
-
-## 🧪 Testing
-
-```bash
-# Ejecutar linter
-npm run lint
-
-# Type checking
-npm run type-check
-```
-
-## 📦 Despliegue
-
-### Vercel (Recomendado)
-
-```bash
-npm i -g vercel
-vercel
-```
-
-### Docker
-
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-```bash
-docker build -t vton-app .
-docker run -p 3000:3000 vton-app
-```
-
-## 📚 Documentación de APIs
-
-- [Replicate API Docs](https://replicate.com/docs)
-- [Fashn.ai Docs](https://fashn.ai/docs)
-- [Decart AI Docs](https://decart.ai/)
-- [Next.js App Router](https://nextjs.org/docs/app)
-- [MediaDevices API](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices)
-
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-
-1. Fork el proyecto
-2. Crea una rama feature (`git checkout -b feature/AmazingFeature`)
-3. Commit cambios (`git commit -m 'Add AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Distribuido bajo la Licencia MIT. Ver `LICENSE` para más información.
-
-## ✉️ Soporte
-
-Para soporte, contacta a través de:
-- Issues en GitHub
-- Email: support@tryonia.com
-- Discord Community: [Enlace]
-
----
-
-**TryOnIA** - Probador Virtual con IA para E-commerce. Construido con ❤️ para revolutionar las compras en línea.
+Con el motor por defecto no hay ninguna petición de red con tu imagen: el modelo
+se sirve desde `/public` y la inferencia corre en WASM dentro de la pestaña. El
+único motor que envía fotogramas a un tercero es `remote`, y sólo cuando lo
+activas explícitamente y pulsas «Capturar».

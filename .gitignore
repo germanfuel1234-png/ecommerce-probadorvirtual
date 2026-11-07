@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+build/
+
+# Variables locales (la plantilla sí se versiona: .env.example)
+.env
+.env*.local
+
+# Artefactos del motor local: los regenera `npm run setup:local-ai`.
+# El modelo de pose pesa ~5 MB, no tiene sentido versionarlo.
+/public/models/
+/public/mediapipe/
+
+next-env.d.ts
+*.tsbuildinfo
+
+.DS_Store
+npm-debug.log*

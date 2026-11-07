@@ -1,0 +1,90 @@
+#!/usr/bin/env node
+/**
+ * Prepara el motor de IA local para que funcione sin internet.
+ *
+ * 1. Copia el runtime WASM de MediaPipe desde node_modules a /public/mediapipe/wasm
+ * 2. Descarga (una sola vez) el modelo de pose a /public/models
+ *
+ * Tras ejecutarse, el probador no vuelve a pedir red: todo se sirve desde /public.
+ * Es idempotente y nunca aborta la instalación: si no hay red, avisa y sigue.
+ */
+import { createWriteStream } from 'node:fs'
+import { access, cp, mkdir, stat, unlink } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { pipeline } from 'node:stream/promises'
+import { fileURLToPath } from 'node:url'
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+const WASM_SRC = join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision', 'wasm')
+const WASM_DEST = join(ROOT, 'public', 'mediapipe', 'wasm')
+
+const MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
+const MODEL_DEST = join(ROOT, 'public', 'models', 'pose_landmarker_lite.task')
+const MODEL_MIN_BYTES = 1_000_000
+
+const exists = (path) =>
+  access(path).then(
+    () => true,
+    () => false
+  )
+
+async function copyWasmRuntime() {
+  if (!(await exists(WASM_SRC))) {
+    console.warn('[setup-local-ai] Falta @mediapipe/tasks-vision. Ejecuta "npm install" primero.')
+    return false
+  }
+
+  await mkdir(dirname(WASM_DEST), { recursive: true })
+  await cp(WASM_SRC, WASM_DEST, { recursive: true })
+  console.log('[setup-local-ai] Runtime WASM copiado a public/mediapipe/wasm')
+  return true
+}
+
+async function downloadPoseModel() {
+  if (await exists(MODEL_DEST)) {
+    const { size } = await stat(MODEL_DEST)
+    if (size >= MODEL_MIN_BYTES) {
+      console.log('[setup-local-ai] Modelo de pose ya presente, no se vuelve a descargar.')
+      return true
+    }
+    // Descarga previa truncada: la rehacemos.
+    await unlink(MODEL_DEST)
+  }
+
+  await mkdir(dirname(MODEL_DEST), { recursive: true })
+
+  try {
+    const response = await fetch(MODEL_URL, { signal: AbortSignal.timeout(120_000) })
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`)
+    }
+
+    await pipeline(response.body, createWriteStream(MODEL_DEST))
+
+    const { size } = await stat(MODEL_DEST)
+    if (size < MODEL_MIN_BYTES) {
+      throw new Error(`descarga incompleta (${size} bytes)`)
+    }
+
+    console.log(`[setup-local-ai] Modelo de pose descargado (${(size / 1e6).toFixed(1)} MB)`)
+    return true
+  } catch (error) {
+    await unlink(MODEL_DEST).catch(() => {})
+    console.warn(`[setup-local-ai] No se pudo descargar el modelo de pose: ${error.message}`)
+    console.warn('[setup-local-ai] El probador arrancará en modo "mock". Reintenta con:')
+    console.warn('[setup-local-ai]   npm run setup:local-ai')
+    return false
+  }
+}
+
+const wasmOk = await copyWasmRuntime()
+const modelOk = wasmOk ? await downloadPoseModel() : false
+
+if (wasmOk && modelOk) {
+  console.log('[setup-local-ai] Motor local listo. Arranca con "npm run dev".')
+}
+
+// Nunca fallamos el install por esto.
+process.exit(0)

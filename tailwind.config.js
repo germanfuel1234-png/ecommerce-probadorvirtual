@@ -1,6 +1,11 @@
-import type { Config } from 'tailwindcss'
-
-const config: Config = {
+/**
+ * Config de Tailwind, en CommonJS por el mismo motivo que `next.config.js`:
+ * Tailwind resuelve `tailwind.config.js` antes que `.ts`, y el original traía
+ * `import type { Config }` dentro de un `.js`.
+ *
+ * @type {import('tailwindcss').Config}
+ */
+module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -19,4 +24,3 @@ const config: Config = {
   },
   plugins: [],
 }
-export default config

@@ -1,26 +1,26 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
+import type { ReactNode } from 'react'
+
 import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Probador Virtual - E-Commerce de Moda',
-  description: 'Experimenta nuestro probador virtual en tiempo real con IA. Pruébate prendas antes de comprar.',
-  keywords: 'virtual try-on, moda, ropa, IA, probador virtual',
+  description:
+    'Probador virtual en tiempo real que corre entero en tu navegador. Pruébate prendas con la cámara antes de comprar.',
+  keywords: ['virtual try-on', 'probador virtual', 'moda', 'IA local'],
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+// En App Router el viewport va en su propio export; dentro de `metadata` Next
+// avisa de deprecación, y los `<meta>` a mano en <head> son redundantes.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
+
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </head>
-      <body className="bg-slate-950 text-gray-100">
-        {children}
-      </body>
+      <body className="bg-slate-950 text-gray-100">{children}</body>
     </html>
   )
 }

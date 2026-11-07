@@ -1,105 +1,76 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
-import { GUIDANCE_OVERLAY_CONFIG } from '@/lib/constants/vtonConfig'
+import { GUIDANCE_CONFIG } from '@/lib/config/tryOn'
 
 interface GuidanceOverlayProps {
-  width: number
-  height: number
   visible?: boolean
+  /** Se resalta cuando el motor pierde el cuerpo, para invitar a recolocarse. */
+  highlight?: boolean
 }
 
 /**
- * Componente que renderiza una guía visual overlay en canvas
- * Muestra un marco indicador para posicionamiento del usuario
+ * Marco guía.
+ *
+ * Es DOM puro, no canvas: la versión anterior dibujaba en un canvas de 640×480
+ * fijo sobre un vídeo responsive con `object-cover`, así que el marco no
+ * coincidía con lo que el usuario veía. Con porcentajes el encaje es exacto a
+ * cualquier tamaño y además se ve nítido en pantallas HiDPI.
  */
-export const GuidanceOverlay: React.FC<GuidanceOverlayProps> = ({
-  width,
-  height,
-  visible = true,
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+export function GuidanceOverlay({ visible = true, highlight = false }: GuidanceOverlayProps) {
+  if (!visible) {
+    return null
+  }
 
-  useEffect(() => {
-    if (!visible || !canvasRef.current) return
+  const margin = `${GUIDANCE_CONFIG.marginRatio * 100}%`
+  const corner = `${GUIDANCE_CONFIG.cornerRatio * 100}%`
+  const color = GUIDANCE_CONFIG.color
 
-    const canvas = canvasRef.current
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
-    // Canvas properties
-    canvas.width = width
-    canvas.height = height
-
-    // Limpia canvas
-    ctx.clearRect(0, 0, width, height)
-
-    if (!GUIDANCE_OVERLAY_CONFIG.showGuide) return
-
-    const margin = width * GUIDANCE_OVERLAY_CONFIG.marginPercent
-    const boxWidth = width - margin * 2
-    const boxHeight = height - margin * 2
-
-    // Marco exterior semi-transparente
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
-    ctx.fillRect(0, 0, width, height)
-
-    // Área clara (donde debe estar el usuario)
-    ctx.clearRect(margin, margin, boxWidth, boxHeight)
-
-    // Borde del marco de guía
-    ctx.strokeStyle = GUIDANCE_OVERLAY_CONFIG.guideColor
-    ctx.lineWidth = GUIDANCE_OVERLAY_CONFIG.guideBorderWidth
-    ctx.globalAlpha = GUIDANCE_OVERLAY_CONFIG.guideOpacity
-
-    // Dibuja rectángulo
-    ctx.strokeRect(margin, margin, boxWidth, boxHeight)
-
-    // Esquinas redondeadas con decoradores
-    const cornerSize = 30
-    ctx.lineWidth = 3
-
-    // Esquina superior izquierda
-    ctx.beginPath()
-    ctx.moveTo(margin, margin + cornerSize)
-    ctx.lineTo(margin, margin)
-    ctx.lineTo(margin + cornerSize, margin)
-    ctx.stroke()
-
-    // Esquina superior derecha
-    ctx.beginPath()
-    ctx.moveTo(width - margin - cornerSize, margin)
-    ctx.lineTo(width - margin, margin)
-    ctx.lineTo(width - margin, margin + cornerSize)
-    ctx.stroke()
-
-    // Esquina inferior izquierda
-    ctx.beginPath()
-    ctx.moveTo(margin, height - margin - cornerSize)
-    ctx.lineTo(margin, height - margin)
-    ctx.lineTo(margin + cornerSize, height - margin)
-    ctx.stroke()
-
-    // Esquina inferior derecha
-    ctx.beginPath()
-    ctx.moveTo(width - margin - cornerSize, height - margin)
-    ctx.lineTo(width - margin, height - margin)
-    ctx.lineTo(width - margin, height - margin - cornerSize)
-    ctx.stroke()
-
-    // Texto instructivo
-    ctx.globalAlpha = 1
-    ctx.fillStyle = GUIDANCE_OVERLAY_CONFIG.guideColor
-    ctx.font = 'bold 18px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('Posiciónate dentro del marco', width / 2, height - margin / 2)
-  }, [width, height, visible])
+  const shade = 'absolute bg-black/35'
+  const bracket = 'absolute'
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute top-0 left-0 w-full h-full pointer-events-none"
-    />
+    <div className="pointer-events-none absolute inset-0 select-none" aria-hidden="true">
+      {/* Zona oscurecida: cuatro bandas que dejan libre el centro. */}
+      <div className={shade} style={{ inset: `0 0 auto 0`, height: margin }} />
+      <div className={shade} style={{ inset: `auto 0 0 0`, height: margin }} />
+      <div className={shade} style={{ top: margin, bottom: margin, left: 0, width: margin }} />
+      <div className={shade} style={{ top: margin, bottom: margin, right: 0, width: margin }} />
+
+      {/* Marco y esquinas. */}
+      <div
+        className="absolute rounded-lg border transition-colors duration-300"
+        style={{
+          inset: margin,
+          borderColor: color,
+          opacity: highlight ? 0.9 : 0.35,
+          borderWidth: highlight ? 2 : 1,
+        }}
+      >
+        <span
+          className={bracket}
+          style={{ top: -2, left: -2, borderTop: `3px solid ${color}`, borderLeft: `3px solid ${color}`, width: corner, height: corner }}
+        />
+        <span
+          className={bracket}
+          style={{ top: -2, right: -2, borderTop: `3px solid ${color}`, borderRight: `3px solid ${color}`, width: corner, height: corner }}
+        />
+        <span
+          className={bracket}
+          style={{ bottom: -2, left: -2, borderBottom: `3px solid ${color}`, borderLeft: `3px solid ${color}`, width: corner, height: corner }}
+        />
+        <span
+          className={bracket}
+          style={{ bottom: -2, right: -2, borderBottom: `3px solid ${color}`, borderRight: `3px solid ${color}`, width: corner, height: corner }}
+        />
+      </div>
+
+      <p
+        className="absolute left-0 right-0 text-center text-xs font-medium tracking-wide drop-shadow"
+        style={{ bottom: `calc(${margin} / 3)`, color }}
+      >
+        {GUIDANCE_CONFIG.label}
+      </p>
+    </div>
   )
 }
 

@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Este archivo estaba en `styles/globals.css` mientras `app/layout.tsx` hacía
+ * `import './globals.css'`, así que el build fallaba con "module not found".
+ * En App Router lo convencional es que viva junto al layout que lo importa.
+ */
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    /* El original aplicaba `text-gray-900` sobre un fondo oscuro: texto negro
+       sobre azul marino, ilegible. */
+    @apply bg-gradient-primary text-gray-100 antialiased;
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .transition-smooth {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .glass-morphism {
+    @apply rounded-xl border border-white/20 bg-white/10 backdrop-blur-md;
+  }
+
+  /* Las transiciones van explícitas en vez de `@apply transition-smooth`:
+     aplicar una utilidad propia definida en el mismo `@layer` depende del orden
+     en que Tailwind resuelva el layer, y falla en silencio (el botón
+     simplemente deja de animarse). */
+  .btn-primary {
+    @apply rounded-lg bg-accent px-6 py-3 font-semibold text-white transition-all duration-300 ease-in-out hover:bg-orange-600;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg bg-gray-700 px-6 py-3 font-semibold text-white transition-all duration-300 ease-in-out hover:bg-gray-600;
+  }
+
+  /* Oculta la barra de scroll manteniendo el desplazamiento. */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}

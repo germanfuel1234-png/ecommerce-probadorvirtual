@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" width="200" height="240">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#B91C1C"/>
+      <stop offset="100%" stop-color="#7F1D1D"/>
+    </linearGradient>
+    <clipPath id="silhouette">
+      <path d="M45,12 C60,10 72,30 100,30 C128,30 140,10 155,12 L184,28 L198,150 L160,158 L160,236 L40,236 L40,158 L2,150 L16,28 Z"/>
+    </clipPath>
+  </defs>
+  <path d="M45,12 C60,10 72,30 100,30 C128,30 140,10 155,12 L184,28 L198,150 L160,158 L160,236 L40,236 L40,158 L2,150 L16,28 Z" fill="url(#g)"/>
+  <g clip-path="url(#silhouette)">
+  <path d="M62,16 C74,44 88,54 100,54 C112,54 126,44 138,16 L148,24 C136,62 118,74 100,74 C82,74 64,62 52,24 Z" fill="#991B1B"/>
+  <path d="M62,160 L138,160 L138,206 L62,206 Z" fill="#9F1239" opacity="0.75"/>
+  <path d="M98,52 L102,52 L102,150 L98,150 Z" fill="#F9FAFB" opacity="0.8"/>
+  </g>
+  <path d="M45,12 C60,10 72,30 100,30 C128,30 140,10 155,12 L184,28 L198,150 L160,158 L160,236 L40,236 L40,158 L2,150 L16,28 Z" fill="none" stroke="#7F1D1D" stroke-width="2" stroke-linejoin="round"/>
+</svg>

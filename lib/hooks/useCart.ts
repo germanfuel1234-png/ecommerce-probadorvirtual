@@ -1,86 +1,80 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { create } from 'zustand'
-import type { Cart, CartItem } from '@/lib/types'
+import { persist } from 'zustand/middleware'
+
+import { findGarment } from '@/lib/catalog/garments'
+import { addLine, countItems, removeLine, setQuantity, totalPrice, type CartLine } from '@/lib/domain/cart'
+import type { Garment, GarmentSize } from '@/lib/domain/garment'
+
+type LineKey = Pick<CartLine, 'garmentId' | 'size'>
 
 interface CartStore {
-  items: CartItem[]
-  total: number
-
-  // Acciones
-  addItem: (item: CartItem) => void
-  removeItem: (clothingId: string) => void
-  updateQuantity: (clothingId: string, quantity: number) => void
+  /** Única fuente de verdad. Unidades y total se derivan, nunca se guardan. */
+  lines: CartLine[]
+  add: (garment: Garment, quantity?: number, size?: GarmentSize) => void
+  remove: (target: LineKey) => void
+  updateQuantity: (target: LineKey, quantity: number) => void
   clear: () => void
-  getTotalItems: () => number
-  getTotalPrice: () => number
 }
 
 /**
- * Store global del carrito usando Zustand
- * Maneja el estado del carrito de compras de manera centralizada
+ * Store del carrito.
+ *
+ * El `total` ya no se guarda en el estado: antes se recalculaba *dentro* del
+ * `set` llamando a `get()`, que todavía veía los items anteriores, así que el
+ * total iba siempre un paso por detrás. Y el precio era un `50` fijo; ahora
+ * sale del catálogo.
  */
-export const useCartStore = create<CartStore>((set, get) => ({
-  items: [],
-  total: 0,
+export const useCartStore = create<CartStore>()(
+  persist(
+    set => ({
+      lines: [],
 
-  addItem: (item: CartItem) => {
-    set(state => {
-      const existingItem = state.items.find(i => i.clothingId === item.clothingId)
+      add: (garment, quantity = 1, size = garment.size) =>
+        set(state => ({
+          lines: addLine(state.lines, { garmentId: garment.id, size, quantity }),
+        })),
 
-      let updatedItems: CartItem[]
-      if (existingItem) {
-        updatedItems = state.items.map(i =>
-          i.clothingId === item.clothingId
-            ? { ...i, quantity: i.quantity + item.quantity }
-            : i
-        )
-      } else {
-        updatedItems = [...state.items, item]
-      }
+      remove: target => set(state => ({ lines: removeLine(state.lines, target) })),
 
-      return {
-        items: updatedItems,
-        total: get().getTotalPrice(),
-      }
-    })
-  },
+      updateQuantity: (target, quantity) =>
+        set(state => ({ lines: setQuantity(state.lines, target, quantity) })),
 
-  removeItem: (clothingId: string) => {
-    set(state => ({
-      items: state.items.filter(i => i.clothingId !== clothingId),
-      total: get().getTotalPrice(),
-    }))
-  },
-
-  updateQuantity: (clothingId: string, quantity: number) => {
-    if (quantity <= 0) {
-      get().removeItem(clothingId)
-      return
+      clear: () => set({ lines: [] }),
+    }),
+    {
+      name: 'tryon-cart',
+      // Se rehidrata a mano desde `useCartHydrated`: si Zustand leyera
+      // localStorage durante el primer render, el HTML del servidor (carrito
+      // vacío) no coincidiría con el del cliente y React avisaría de
+      // hydration mismatch.
+      skipHydration: true,
     }
+  )
+)
 
-    set(state => ({
-      items: state.items.map(i =>
-        i.clothingId === clothingId ? { ...i, quantity } : i
-      ),
-      total: get().getTotalPrice(),
-    }))
-  },
+/**
+ * Lee localStorage después del primer render y dice si ya está listo, para que
+ * la UI pueda no mostrar el contador hasta entonces.
+ */
+export function useCartHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(false)
 
-  clear: () => {
-    set({ items: [], total: 0 })
-  },
+  useEffect(() => {
+    void useCartStore.persist.rehydrate()
+    setHydrated(true)
+  }, [])
 
-  getTotalItems: () => {
-    return get().items.reduce((acc, item) => acc + item.quantity, 0)
-  },
+  return hydrated
+}
 
-  getTotalPrice: () => {
-    return get().items.reduce((acc, item) => {
-      // En producción, obtendría el precio del catálogo
-      return acc + item.quantity * 50 // Precio dummy
-    }, 0)
-  },
-}))
+/** Unidades totales. Primitivo, así que no provoca re-renders de más. */
+export const useCartCount = (): number => useCartStore(state => countItems(state.lines))
+
+/** Importe total resuelto contra el catálogo. */
+export const useCartTotal = (): number =>
+  useCartStore(state => totalPrice(state.lines, findGarment))
 
 export default useCartStore

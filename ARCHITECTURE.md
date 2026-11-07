@@ -1,405 +1,155 @@
-# Arquitectura Técnica - Virtual Try-On E-Commerce
+# Arquitectura
 
-## 🏗️ Arquitectura General
+Probador virtual en tiempo real sobre Next.js App Router, con el procesamiento
+de IA **dentro del navegador**. Ni el vídeo ni los fotogramas salen del equipo.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      USER BROWSER                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │           Next.js Frontend Application                │   │
-│  │  ┌─────────────────────────────────────────────────┐ │   │
-│  │  │  VirtualTryOnModal                              │ │   │
-│  │  │  ├─ CameraFeed (navigator.mediaDevices)        │ │   │
-│  │  │  ├─ GuidanceOverlay (Canvas overlay)           │ │   │
-│  │  │  ├─ ProductSelector                            │ │   │
-│  │  │  └─ CartButton (Floating action)               │ │   │
-│  │  └─────────────────────────────────────────────────┘ │   │
-│  │  ┌─────────────────────────────────────────────────┐ │   │
-│  │  │  Hooks (React)                                   │ │   │
-│  │  │  ├─ useCamera (MediaStream API)                │ │   │
-│  │  │  ├─ useVirtualTryOn (VTON logic)               │ │   │
-│  │  │  └─ useCart (Zustand store)                    │ │   │
-│  │  └─────────────────────────────────────────────────┘ │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                          │                                   │
-│                          ▼ (HTTP/Fetch)                      │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Clients (lib/api/)                              │   │
-│  │  ├─ MockVTONClient (Dev/Testing)                    │   │
-│  │  ├─ ReplicateVTONClient                             │   │
-│  │  ├─ FashnVTONClient                                 │   │
-│  │  └─ DecartVTONClient                                │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                          │                                   │
-└──────────────────────────┼───────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-        ▼                  ▼                  ▼
-   ┌─────────┐        ┌─────────┐       ┌─────────┐
-   │Replicate│        │ Fashn  │       │ Decart  │
-   │  API    │        │ API    │       │ API     │
-   └────┬────┘        └────┬───┘       └────┬────┘
-        │                  │               │
-        └──────────────────┼───────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │   GPU Server  │
-                    │  (Inference)  │
-                    │  IDM-VTON,    │
-                    │  Cat-VTON     │
-                    └───────────────┘
-```
+## Capas
 
-## 📡 Flujo de Datos
-
-### 1. **Captura de Video (Cliente)**
-
-```typescript
-// useCamera.ts
-navigator.mediaDevices.getUserMedia({
-  video: { width: 640, height: 480 },
-  audio: false
-})
-↓
-MediaStream
-↓
-<video> element (renderer)
-↓
-canvas.captureFrame() ← Cada N ms según FPS
-↓
-Blob (JPEG/WebP)
-```
-
-### 2. **Procesamiento VTON**
-
-```typescript
-// useVirtualTryOn.ts
-{
-  frameBlob: Blob,        // From canvas
-  clothingImage: Blob,    // From catalog
-  clothingType: string,   // shirt, jacket, etc
-  userId: string,         // Session identifier
-}
-↓
-VTONClient.processFrame()
-↓
-HTTP POST to Provider API
-↓
-Response: { processedFrame: Blob, latency: ms }
-↓
-Display on Canvas/Video overlay
-```
-
-### 3. **Carrito (Global State)**
-
-```typescript
-// useCart.ts (Zustand)
-CartStore {
-  items: CartItem[],
-  total: number
-}
-↓
-Acciones: addItem, removeItem, updateQuantity, clear
-↓
-Persistencia (localStorage o API)
-```
-
-## 🎯 Diagrama de Componentes
+Las dependencias van siempre hacia abajo. Ninguna capa inferior conoce a las de
+arriba, y el núcleo no conoce ni React ni el DOM.
 
 ```
-app/page.tsx (Home)
-├── Header
-├── HeroSection
-├── CatalogGrid
-│   └── ProductCard[]
-│       └── onClick → VirtualTryOnModal
-├── FeatureSection
-└── Footer
-
-VirtualTryOnModal
-├── Header (close button)
-├── MainContent
-│   ├── LeftPanel (1/2)
-│   │   ├── CameraFeed
-│   │   │   ├── <video>
-│   │   │   ├── <canvas> (hidden)
-│   │   │   └── GuidanceOverlay
-│   │   │       └── <canvas> (overlay)
-│   │   └── LatencyDisplay
-│   │
-│   └── RightPanel (1/2)
-│       ├── ProductSelector
-│       │   └── ClothingThumbnail[]
-│       ├── SuccessMessage
-│       ├── ErrorMessage
-│       └── InfoPanel
-│
-└── CartButton (fixed)
-    └── ShoppingCart icon + count
+┌──────────────────────────────────────────────────────────────┐
+│ app/                        Rutas, layout, API route          │
+│   page.tsx                  tienda + apertura del probador    │
+│   api/try-on/route.ts       proxy servidor del motor remoto    │
+├──────────────────────────────────────────────────────────────┤
+│ components/                 UI. Sin lógica de negocio          │
+│   shop/                     StoreHeader, GarmentCard, CartPanel│
+│   VirtualTryOn/             Modal, TryOnStage, GuidanceOverlay,│
+│                             GarmentSelector, AddToCartButton   │
+├──────────────────────────────────────────────────────────────┤
+│ lib/hooks/                  Adaptadores React                  │
+│   useCamera                 dueño ÚNICO del MediaStream        │
+│   useTryOn                  motor + bucle de render + métricas │
+│   useCart                   store Zustand (sólo las líneas)    │
+├──────────────────────────────────────────────────────────────┤
+│ lib/engines/                Infraestructura de IA              │
+│   types.ts                  interfaz TryOnEngine               │
+│   registry.ts               fábrica + cadena de degradación    │
+│   localPoseEngine           MediaPipe + canvas  ← activo       │
+│   mockEngine                posición fija, sin IA              │
+│   remoteEngine              habla con /api/try-on              │
+│   poseGeometry              matemática pura (con tests)        │
+│   canvas                    utilidades de <canvas>             │
+├──────────────────────────────────────────────────────────────┤
+│ lib/server/                 Sólo servidor (`import 'server-only'`)│
+│   tryOnProvider             credenciales + llamada al proveedor│
+├──────────────────────────────────────────────────────────────┤
+│ lib/domain/                 Núcleo puro: sin React, DOM ni red │
+│   garment, cart, tryOn                                         │
+│ lib/catalog/  lib/config/   Datos y parámetros                 │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## 🔄 Estado de Máquina (State Machine)
+El criterio que ordena todo esto: **lo que se puede probar sin navegador vive en
+`lib/domain` y `lib/engines/poseGeometry`**. Es donde están los errores que no se
+ven mirando la pantalla (un signo invertido en la rotación, un total desfasado),
+y es lo que cubre `npm test`.
+
+## El pipeline por fotograma
 
 ```
-IDLE
-  │
-  └─→ startCamera() ──→ LOADING
-                          │
-                          ├─ camera ready ──→ CAMERA_ACTIVE
-                          │
-                          └─ permission denied ──→ CAMERA_PERMISSION_DENIED
-                                                       │
-                                                       └─ retry ──→ LOADING
-CAMERA_ACTIVE
-  │
-  ├─→ selectClothing() → startFrameCapture()
-  │   │
-  │   └─→ each frame ──→ PROCESSING_FRAME
-  │                        │
-  │                        ├─ success ──→ STREAM_ACTIVE
-  │                        │              │
-  │                        │              └─ (repeat loop)
-  │                        │
-  │                        └─ error ──→ ERROR
-  │
-  └─→ stopCamera() ──→ IDLE
+<video>  (useCamera: único MediaStream)
+   │
+   ├─ el motor lo lee directamente, sin codificar a Blob
+   ▼
+PoseLandmarker (WASM local)  ──►  33 landmarks normalizados
+   │
+   ▼
+poseGeometry.buildBodyFrame   hombros/caderas/piernas → px de canvas
+   │                          null si no hay confianza suficiente
+   ▼
+poseGeometry.smoothBodyFrame  media exponencial (quita el temblor)
+   │
+   ▼
+poseGeometry.placeGarment     rectángulo orientado según el eje del torso
+   │
+   ▼
+<canvas>  vídeo reflejado + prenda compuesta  ← esto es lo que se ve
 ```
 
-## 📊 Estructuras de Datos
+La interfaz del motor es `<video> → <canvas>`, no `Blob → Blob`. Codificar cada
+fotograma a JPEG y volver a decodificarlo hace imposible sostener 30 fps; ese
+era el cuello de botella del diseño anterior.
 
-### Clothing
+## Motores
 
-```typescript
-interface Clothing {
-  id: string                    // Unique ID
-  name: string                  // Display name
-  category: 'shirt'|'jacket'    // Type
-  imageUrl: string              // URL to PNG image
-  price: number                 // Price in USD
-  description: string           // Product description
-  color: string                 // Color name
-  size: 'XS'|'S'|'M'|'L'...    // Size
-}
-```
+Todos implementan `TryOnEngine`, así que la UI no cambia al cambiar de motor. Se
+elige con `NEXT_PUBLIC_TRYON_ENGINE`.
 
-### CartItem
+| Motor | `mode` | Red | Qué hace |
+|---|---|---|---|
+| `local-pose` | `realtime` | No | MediaPipe en el navegador. ~30 fps, sin GPU dedicada. **Por defecto.** |
+| `mock` | `realtime` | No | Prenda en posición fija. Para desarrollar UI y como degradación. |
+| `remote` | `snapshot` | Sí | Difusión real vía `/api/try-on`. Segundos por pasada, no es tiempo real. |
 
-```typescript
-interface CartItem {
-  clothingId: string            // Reference to Clothing
-  quantity: number              // How many
-  selectedSize: string          // User's size choice
-  selectedColor: string         // User's color choice
-}
-```
+`mode` existe porque un motor de difusión no puede correr en bucle: `useTryOn`
+lanza el bucle de `requestAnimationFrame` para `realtime`, y para `snapshot`
+mantiene la vista previa en vivo y sólo invoca el motor cuando el usuario pulsa
+«Capturar».
 
-### VTONResponse
+Si el motor preferido no arranca (falta el modelo, no hay WebGL, no hay
+proveedor configurado), `registry.fallbackEngineFor` degrada a `mock` y la UI lo
+avisa en lugar de quedarse en blanco.
 
-```typescript
-interface VTONResponse {
-  success: boolean              // Operation success
-  processedFrame?: Blob         // Output image
-  timestamp: number             // When processed
-  error?: string                // Error message
-  latency: number               // Processing time (ms)
-}
-```
+### Qué hace y qué no hace el motor local
 
-## 🎬 Ciclo de Vida del Componente
+Hace: detecta el cuerpo, escala la prenda con la distancia a la cámara, sigue la
+inclinación del torso, suaviza el temblor del detector y distingue torso de
+piernas.
 
-### VirtualTryOnModal
+No hace: no es difusión, así que **deforma** la prenda sobre el cuerpo en vez de
+re-renderizarla — no hay drapeado, sombras ni físicas de tela. Y no resuelve
+oclusión: si cruzas los brazos por delante, la prenda se dibuja encima. El
+siguiente paso natural sería añadir `ImageSegmenter` (segmentación de persona) y
+usar la máscara para recortar la prenda; se puede hacer dentro de
+`localPoseEngine` sin tocar nada más.
 
-```
-MOUNT
-  ├─ useCamera.startCamera()
-  ├─ vton.selectClothing(first_item)
-  └─ Set up frame capture loop
-      │
-      ▼
-ON_CAMERA_READY
-  ├─ Get video dimensions
-  └─ Start requestAnimationFrame loop
-      │
-      ├─→ Check if 200ms elapsed
-      │
-      └─→ canvas.captureFrame()
-          │
-          └─→ vton.processFrame(frame, clothing)
-              │
-              ├─→ API request
-              │
-              └─→ Response received
-                  │
-                  ├─→ setProcessedFrame(blob)
-                  └─→ setState('stream_active')
-      │
-      ├─→ selectClothing(newClothing)
-      │   └─→ Reset timer for immediate processing
-      │
-      └─→ (repeat)
+Para fotorrealismo hace falta difusión, y eso implica o GPU propia (ComfyUI con
+CatVTON/IDM-VTON) o el motor `remote`.
 
-ON_UNMOUNT
-  ├─ Cancel frameInterval
-  ├─ camera.stopCamera()
-  ├─ vton.reset()
-  └─ Cleanup
-```
+## Dónde viven las credenciales
 
-## ⚡ Performance Considerations
+`lib/server/tryOnProvider.ts` empieza con `import 'server-only'`: el build falla
+si alguien lo importa desde un componente cliente. El navegador sólo habla con
+`/api/try-on`, que resuelve el `garmentId` contra el catálogo del servidor para
+que el cliente no pueda pedir el procesado de una imagen arbitraria.
 
-### Frame Capture Strategy
+Las variables del proveedor **no** llevan prefijo `NEXT_PUBLIC_`, a propósito:
+con el prefijo acabarían en el bundle del navegador.
 
-```typescript
-// Target: ~24 FPS input, 12 FPS to API
-const FPS_TARGET = 24
-const API_CALL_FPS = 12
-const MIN_FRAME_INTERVAL = 1000 / API_CALL_FPS  // 83ms
+## Assets del motor local
 
-requestAnimationFrame(() => {
-  now = performance.now()
-  
-  if (now - lastFrameTime >= MIN_FRAME_INTERVAL) {
-    // Process frame
-    vton.processFrame(...)
-    lastFrameTime = now
-  }
-})
-```
+`npm run setup:local-ai` (se ejecuta solo en el `postinstall`):
 
-### Canvas Optimization
+1. Copia el runtime WASM de `node_modules/@mediapipe/tasks-vision/wasm` a
+   `public/mediapipe/wasm`.
+2. Descarga `pose_landmarker_lite.task` (~5 MB) a `public/models`.
 
-```typescript
-// Use OffscreenCanvas if available (better performance)
-if (typeof OffscreenCanvas !== 'undefined') {
-  const offscreen = canvas.transferControlToOffscreen()
-  worker.postMessage({ canvas: offscreen })
-} else {
-  // Fallback: main thread canvas
-}
-```
+Se sirve todo desde `/public`, sin CDN, para que el probador funcione sin
+internet. Ambas carpetas están en `.gitignore`: son artefactos regenerables.
 
-### Image Compression
+`npm run generate:garments` reconstruye las siluetas de `public/garments`. La
+convención que espera el motor: **la línea de hombros va en el borde superior**
+del arte y la prenda cae hacia abajo; cualquier margen transparente arriba
+descoloca la prenda. Para una tienda real, sustituye los SVG por PNG recortados
+respetando esa convención y ajusta `fit` en el catálogo.
 
-```typescript
-// JPEG at 85% quality for good balance
-canvas.toBlob(
-  blob => { /* ... */ },
-  'image/jpeg',
-  0.85
-)
+## Decisiones que conviene no revertir
 
-// WebP support fallback
-canvas.toBlob(
-  blob => { /* ... */ },
-  'image/webp',
-  0.85
-)
-```
-
-## 🔐 Seguridad
-
-### Client-Side
-
-- ✅ Frame capture happens locally (no upload to unknown servers)
-- ✅ WebRTC offers ICE candidates validation
-- ✅ CORS headers prevent cross-origin abuse
-
-### API Communication
-
-- ✅ Use HTTPS/WSS only
-- ✅ Validate API responses
-- ✅ Implement rate limiting
-- ✅ Never expose API keys in client code
-
-```typescript
-// WRONG (Client-side)
-const response = await fetch(API_URL, {
-  headers: { 'Authorization': `Bearer ${API_KEY}` }
-})
-
-// RIGHT (Via Backend Proxy)
-const response = await fetch('/api/vton/process', {
-  method: 'POST',
-  body: formData
-})
-// Backend then calls external API with secret key
-```
-
-## 📈 Scalability
-
-### Horizontal Scaling
-
-```
-Load Balancer
-├─ Next.js Instance 1
-├─ Next.js Instance 2
-└─ Next.js Instance N
-        │
-        └─→ VTON Worker Pool
-            ├─ GPU Server 1
-            ├─ GPU Server 2
-            └─ GPU Server N
-```
-
-### Caching Strategy
-
-```typescript
-// Cache processed results (Redis)
-const cacheKey = `vton:${hash(frame + clothing)}`
-const cached = await redis.get(cacheKey)
-
-if (cached) {
-  return JSON.parse(cached)  // Instant response
-} else {
-  const result = await vtonAPI.process(...)
-  await redis.setex(cacheKey, 3600, JSON.stringify(result))
-  return result
-}
-```
-
-## 🚀 Deployment
-
-### Vercel (Recommended)
-
-```yaml
-# vercel.json
-{
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "env": {
-    "NEXT_PUBLIC_VTON_PROVIDER": "replicate",
-    "REPLICATE_API_KEY": "@REPLICATE_KEY"
-  }
-}
-```
-
-### Docker
-
-```dockerfile
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN npm install && npm run build
-
-FROM node:18-alpine
-WORKDIR /app
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/public ./public
-COPY package*.json ./
-
-EXPOSE 3000
-CMD ["npm", "start"]
-```
-
-## 📚 Referencias Técnicas
-
-- **MediaDevices API**: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices
-- **Canvas API**: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API
-- **WebRTC**: https://webrtc.org/
-- **Replicate Documentation**: https://replicate.com/docs
-- **Zustand**: https://github.com/pmndrs/zustand
-- **Next.js 14 App Router**: https://nextjs.org/docs/app
+- **Un solo dueño de la cámara.** `useCamera` se llama una vez por pantalla y el
+  `videoRef` baja por props. Dos llamadas al hook = dos streams y dos juegos de
+  refs, y el que captura fotogramas se queda con un `<video>` nulo.
+- **El bucle de render vive en un efecto, no en un callback.** Si la función que
+  arranca la captura depende de estado que cambia en cada fotograma, se crea un
+  bucle nuevo por fotograma sin cancelar el anterior.
+- **Las métricas se acumulan en refs** y se publican cada 250 ms. Un `setState`
+  por fotograma re-renderiza el modal entero 30 veces por segundo.
+- **El carrito guarda sólo las líneas.** Unidades, total y datos de la prenda se
+  derivan del catálogo en cada lectura; un total almacenado se desincroniza.
+  `CartPanel` resuelve nombre y precio al pintar, y muestra las líneas cuya
+  prenda ya no existe en el catálogo para que se puedan quitar, en vez de
+  ocultarlas aportando 0.
+- **El marco guía es DOM, no canvas.** Un canvas de tamaño fijo sobre un vídeo
+  responsive con `object-cover` no coincide con lo que el usuario ve.
