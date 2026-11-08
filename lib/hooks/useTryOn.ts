@@ -32,6 +32,8 @@ export interface UseTryOnResult {
   /** Sólo para motores `snapshot`: lanza una pasada y congela el resultado. */
   captureSnapshot: () => Promise<void>
   resumePreview: () => void
+  /** Descarta el suavizado acumulado; el motor vuelve a fijar la prenda desde cero. */
+  recalibrate: () => void
   isFrozen: boolean
   isProcessing: boolean
 }
@@ -308,6 +310,10 @@ export function useTryOn({
     setIsFrozen(false)
   }, [])
 
+  const recalibrate = useCallback(() => {
+    engineRef.current?.recalibrate?.()
+  }, [])
+
   return {
     engine,
     state,
@@ -318,6 +324,7 @@ export function useTryOn({
     selectGarment,
     captureSnapshot,
     resumePreview,
+    recalibrate,
     isFrozen,
     isProcessing,
   }

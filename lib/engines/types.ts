@@ -46,6 +46,14 @@ export interface TryOnEngine {
   /** Compone un frame de `source` dentro de `target`. */
   renderFrame(request: FrameRequest): Promise<FrameResult>
 
+  /**
+   * Descarta el suavizado acumulado entre frames, para que el siguiente frame
+   * válido fije la posición de golpe en vez de interpolar desde la anterior.
+   * Sólo tiene sentido en motores con estado entre frames; opcional porque los
+   * `snapshot` no lo tienen.
+   */
+  recalibrate?(): void
+
   /** Libera modelos y texturas. */
   dispose(): void
 }

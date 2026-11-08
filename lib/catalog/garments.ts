@@ -90,6 +90,76 @@ export const GARMENTS: readonly Garment[] = [
     price: 64.99,
     imageUrl: '/garments/chino-black.svg',
   }),
+
+  // A partir de acá: fotos reales de producto (no siluetas vectoriales),
+  // procesadas con `scripts/import-photos/process_photos.py --mode on-model`
+  // a partir de un subset de Kaggle (paramaggarwal/fashion-product-images,
+  // licencia MIT). Son fotos de catálogo con alguien puesta la prenda: el
+  // segmentador de ropa (el mismo ImageSegmenter que usa el motor para la
+  // oclusión) aisló sólo la prenda y descartó a la persona.
+  defineGarment({
+    id: 'jacket-003',
+    name: 'Trench Forever New Crudo',
+    description: 'Trench clásico con cinturón, foto de catálogo real.',
+    category: 'jacket',
+    color: 'Crudo',
+    size: 'M',
+    price: 94.99,
+    imageUrl: '/garments/jacket-cream-6889.png',
+    fit: { widthScale: 1.85, heightScale: 1.35 },
+  }),
+  defineGarment({
+    id: 'jacket-004',
+    name: 'Campera Adidas Originals Verde',
+    description: 'Campera deportiva con franjas laterales, foto de catálogo real.',
+    category: 'jacket',
+    color: 'Verde',
+    size: 'M',
+    price: 89.99,
+    imageUrl: '/garments/jacket-green-19744.png',
+    fit: { widthScale: 1.85, heightScale: 1.35 },
+  }),
+  defineGarment({
+    id: 'shirt-003',
+    name: 'Polo Puma Gris',
+    description: 'Polo deportivo con logo bordado, foto de catálogo real.',
+    category: 'shirt',
+    color: 'Gris',
+    size: 'M',
+    price: 39.99,
+    imageUrl: '/garments/shirt-grey-polo-53759.png',
+  }),
+  defineGarment({
+    id: 'shirt-004',
+    name: 'Camisa a Cuadros Azul Marino',
+    description: 'Camisa de manga corta a cuadros, foto de catálogo real.',
+    category: 'shirt',
+    color: 'Azul Marino',
+    size: 'M',
+    price: 44.99,
+    imageUrl: '/garments/shirt-navy-blue-15970.png',
+  }),
+  defineGarment({
+    id: 'shirt-005',
+    name: 'Camisa Jealous 21 Violeta',
+    description: 'Camisa de mujer manga corta, foto de catálogo real.',
+    category: 'shirt',
+    color: 'Violeta',
+    size: 'M',
+    price: 42.99,
+    imageUrl: '/garments/shirt-purple-26960.png',
+  }),
+  defineGarment({
+    id: 'sweater-003',
+    name: 'Buzo Adidas Celeste',
+    description: 'Buzo deportivo con capucha, foto de catálogo real.',
+    category: 'sweater',
+    color: 'Celeste',
+    size: 'M',
+    price: 69.99,
+    imageUrl: '/garments/sweater-blue-23876.png',
+    fit: { widthScale: 1.75, heightScale: 1.3 },
+  }),
 ]
 
 const BY_ID = new Map(GARMENTS.map(g => [g.id, g]))

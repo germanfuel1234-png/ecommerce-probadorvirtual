@@ -12,6 +12,14 @@ build/
 /public/models/
 /public/mediapipe/
 
+# Pipeline de importación de fotos (scripts/import-photos): venv de Python,
+# fotos crudas que trae cada cliente/corrida y el borrador de catálogo que
+# genera. Las fotos sí se versionan una vez procesadas (public/garments/).
+/scripts/import-photos/.venv/
+/scripts/import-photos/sample-input/
+/scripts/import-photos/*-input/
+/scripts/import-photos/catalog.generated.json
+
 next-env.d.ts
 *.tsbuildinfo
 

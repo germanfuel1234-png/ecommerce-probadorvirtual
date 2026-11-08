@@ -1,7 +1,7 @@
 'use client'
 
 import clsx from 'clsx'
-import { Camera, Eye, EyeOff, Loader2, X, Zap } from 'lucide-react'
+import { Camera, Eye, EyeOff, Loader2, RefreshCw, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 
 import { findGarment, GARMENTS } from '@/lib/catalog/garments'
@@ -139,13 +139,27 @@ export function VirtualTryOnModal({ onClose, initialGarmentId }: VirtualTryOnMod
                 )}
               </span>
 
-              <button
-                onClick={() => setShowGuidance(current => !current)}
-                className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-2 py-1 transition hover:bg-slate-700"
-              >
-                {showGuidance ? <EyeOff size={14} /> : <Eye size={14} />}
-                {showGuidance ? 'Ocultar guía' : 'Mostrar guía'}
-              </button>
+              <span className="inline-flex items-center gap-2">
+                {tryOn.engine?.mode === 'realtime' && (
+                  <button
+                    onClick={tryOn.recalibrate}
+                    disabled={tryOn.state !== 'tracking' && tryOn.state !== 'no_body'}
+                    title="Si la prenda quedó desalineada o te moviste de sitio, fuerza a recalcular su posición desde el frame actual"
+                    className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-2 py-1 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RefreshCw size={14} />
+                    Volver a calibrar
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setShowGuidance(current => !current)}
+                  className="inline-flex items-center gap-1.5 rounded bg-slate-800 px-2 py-1 transition hover:bg-slate-700"
+                >
+                  {showGuidance ? <EyeOff size={14} /> : <Eye size={14} />}
+                  {showGuidance ? 'Ocultar guía' : 'Mostrar guía'}
+                </button>
+              </span>
             </div>
 
             {isSnapshot && (

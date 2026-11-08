@@ -35,6 +35,18 @@ export const LOCAL_ENGINE_CONFIG = {
   minVisibility: 0.5,
   /** Opacidad de la prenda compuesta. Algo menor que 1 integra mejor los bordes. */
   garmentOpacity: 0.95,
+  /**
+   * Modelo multiclase de `ImageSegmenter` (pelo/piel/cara/ropa/fondo) usado para
+   * la oclusión: si falta o no carga, el motor sigue funcionando sin ella, igual
+   * que degradaba antes de que existiera esta opción.
+   */
+  segmentationModelPath: '/models/selfie_multiclass_256x256.tflite',
+  /**
+   * Índices de categoría del modelo que deben pintarse **encima** de la prenda
+   * (piel/pelo/cara), así un brazo cruzado por delante del torso no queda
+   * tapado. `4` (ropa) y `0` (fondo) se dejan debajo a propósito.
+   */
+  occludingCategories: [1, 2, 3] as const,
 }
 
 export const GUIDANCE_CONFIG = {

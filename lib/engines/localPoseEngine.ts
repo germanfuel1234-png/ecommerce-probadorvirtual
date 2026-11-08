@@ -5,17 +5,24 @@
  *   <video> → MediaPipe PoseLandmarker (WASM, local) → landmarks
  *           → geometría (poseGeometry) → rectángulo orientado
  *           → composición de la prenda en <canvas>
+ *           → ImageSegmenter (opcional) → recorte de oclusión
  *
  * No hay red, no hay API key y no hace falta GPU dedicada: el WASM corre sobre
  * WebGL si está disponible y cae a CPU si no. A cambio no es difusión: la
- * prenda se deforma y se orienta sobre el cuerpo, no se re-renderiza, y no
- * resuelve oclusión (si cruzas los brazos, la prenda se dibuja encima).
+ * prenda se deforma y se orienta sobre el cuerpo, no se re-renderiza.
+ *
+ * La oclusión (que un brazo cruzado por delante del torso no quede tapado) se
+ * resuelve con un segundo modelo, `ImageSegmenter` multiclase, que separa
+ * pelo/piel/cara del resto del frame. Es una mejora, no un requisito: si el
+ * modelo no está descargado o falla al cargar, el motor sigue funcionando
+ * exactamente como antes, sin recorte.
  */
-import type { PoseLandmarker } from '@mediapipe/tasks-vision'
+import type { ImageSegmenter, PoseLandmarker } from '@mediapipe/tasks-vision'
 
 import { LOCAL_ENGINE_CONFIG } from '@/lib/config/tryOn'
 import type { Garment } from '@/lib/domain/garment'
 import { drawGarment, drawVideoFrame, isVideoReady, syncCanvasSize } from './canvas'
+import { OcclusionMask } from './occlusionMask'
 import { buildBodyFrame, placeGarment, smoothBodyFrame, type BodyFrame } from './poseGeometry'
 import { EngineInitError, type EngineInfo, type FrameRequest, type FrameResult, type TryOnEngine } from './types'
 
@@ -28,11 +35,17 @@ export class LocalPoseEngine implements TryOnEngine {
   }
 
   private landmarker: PoseLandmarker | null = null
+  private segmenter: ImageSegmenter | null = null
   private garment: Garment | null = null
   private garmentImage: HTMLImageElement | null = null
   private readonly imageCache = new Map<string, HTMLImageElement>()
   private smoothed: BodyFrame | null = null
   private lastTimestamp = -1
+  private lastSegmentTimestamp = -1
+
+  /** Capa aparte para poder recortar la prenda sin tocar el frame ya pintado. */
+  private garmentLayer: HTMLCanvasElement | null = null
+  private readonly occlusion = new OcclusionMask()
 
   async init(): Promise<void> {
     if (this.landmarker) {
@@ -76,6 +89,48 @@ export class LocalPoseEngine implements TryOnEngine {
         ...options,
         baseOptions: { modelAssetPath: LOCAL_ENGINE_CONFIG.modelPath, delegate: 'CPU' },
       })
+    }
+
+    this.garmentLayer = document.createElement('canvas')
+    this.segmenter = await this.initSegmenter(vision, fileset)
+  }
+
+  /**
+   * La oclusión es una mejora, no un requisito: a diferencia del `landmarker`
+   * (que si falla aborta todo el motor), un fallo aquí sólo se registra y el
+   * resto sigue funcionando sin recorte, como antes de que existiera esto.
+   */
+  private async initSegmenter(
+    vision: typeof import('@mediapipe/tasks-vision'),
+    fileset: Awaited<ReturnType<typeof import('@mediapipe/tasks-vision').FilesetResolver.forVisionTasks>>
+  ): Promise<ImageSegmenter | null> {
+    const probe = await fetch(LOCAL_ENGINE_CONFIG.segmentationModelPath, { method: 'HEAD' }).catch(() => null)
+    if (!probe?.ok) {
+      console.warn(
+        '[local-pose] No se encuentra el modelo de segmentación; sigue sin oclusión. Ejecuta: npm run setup:local-ai'
+      )
+      return null
+    }
+
+    const segmenterOptions = {
+      runningMode: 'VIDEO' as const,
+      outputCategoryMask: true,
+      outputConfidenceMasks: false,
+      baseOptions: { modelAssetPath: LOCAL_ENGINE_CONFIG.segmentationModelPath, delegate: 'GPU' as const },
+    }
+
+    try {
+      return await vision.ImageSegmenter.createFromOptions(fileset, segmenterOptions)
+    } catch {
+      try {
+        return await vision.ImageSegmenter.createFromOptions(fileset, {
+          ...segmenterOptions,
+          baseOptions: { ...segmenterOptions.baseOptions, delegate: 'CPU' },
+        })
+      } catch (err) {
+        console.warn('[local-pose] No se pudo iniciar el segmentador; sigue sin oclusión.', err)
+        return null
+      }
     }
   }
 
@@ -151,24 +206,80 @@ export class LocalPoseEngine implements TryOnEngine {
 
     this.smoothed = smoothBodyFrame(this.smoothed, body, LOCAL_ENGINE_CONFIG.smoothing)
 
-    drawGarment(
-      ctx,
-      placeGarment(this.smoothed, this.garment.fit),
-      this.garmentImage,
-      LOCAL_ENGINE_CONFIG.garmentOpacity
-    )
+    this.compositeGarment(ctx, source, placeGarment(this.smoothed, this.garment.fit), width, height, mirrored, timestampMs)
 
     return { bodyDetected: true, latencyMs: performance.now() - startedAt }
+  }
+
+  /**
+   * Pinta la prenda y, si hay segmentador disponible, la recorta antes de
+   * componerla: se dibuja en una capa aparte, se recorta con la máscara de
+   * pelo/piel de ese mismo frame y recién entonces se vuelca al canvas visible.
+   */
+  private compositeGarment(
+    ctx: CanvasRenderingContext2D,
+    source: HTMLVideoElement,
+    placement: ReturnType<typeof placeGarment>,
+    width: number,
+    height: number,
+    mirrored: boolean,
+    timestampMs: number
+  ): void {
+    if (!this.garmentImage) {
+      return
+    }
+
+    if (!this.segmenter || !this.garmentLayer) {
+      drawGarment(ctx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+      return
+    }
+
+    const layer = this.garmentLayer
+    if (layer.width !== width || layer.height !== height) {
+      layer.width = width
+      layer.height = height
+    }
+
+    const layerCtx = layer.getContext('2d')
+    if (!layerCtx) {
+      drawGarment(ctx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+      return
+    }
+
+    layerCtx.clearRect(0, 0, width, height)
+    drawGarment(layerCtx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+
+    // El segmentador tiene su propio reloj de timestamps crecientes: es un
+    // modelo WASM distinto del landmarker, no comparte estado con él.
+    if (timestampMs > this.lastSegmentTimestamp) {
+      this.lastSegmentTimestamp = timestampMs
+      const result = this.segmenter.segmentForVideo(source, timestampMs)
+      if (result.categoryMask) {
+        this.occlusion.apply(layer, result.categoryMask, LOCAL_ENGINE_CONFIG.occludingCategories, mirrored)
+      }
+      result.close()
+    }
+
+    ctx.drawImage(layer, 0, 0)
+  }
+
+  /** Fuerza al siguiente frame válido a fijar la prenda sin arrastrar el suavizado anterior. */
+  recalibrate(): void {
+    this.smoothed = null
   }
 
   dispose(): void {
     this.landmarker?.close()
     this.landmarker = null
+    this.segmenter?.close()
+    this.segmenter = null
+    this.garmentLayer = null
     this.garment = null
     this.garmentImage = null
     this.imageCache.clear()
     this.smoothed = null
     this.lastTimestamp = -1
+    this.lastSegmentTimestamp = -1
   }
 
   private async loadImage(src: string): Promise<HTMLImageElement> {
