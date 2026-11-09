@@ -37,7 +37,22 @@ export interface GarmentPlacement {
   rotation: number
   /** Desplazamiento vertical ya resuelto a píxeles. */
   offsetY: number
+  /**
+   * Ancho relativo a `width` según la altura `t` (0 = borde superior, 1 =
+   * bajo). 1 en todo el rango = el rectángulo de siempre; `drawGarment` lo usa
+   * para angostar la prenda a la altura de la cintura en vez de pegarla como
+   * un bloque uniforme.
+   */
+  widthAt: (t: number) => number
 }
+
+/**
+ * Cuánto se angosta la prenda a la altura de la cintura, como fracción del
+ * ancho de referencia (hombros/caderas). Es una aproximación barata a que la
+ * tela siga el contorno del cuerpo — no hay malla ni física de tela, sólo una
+ * curva suave entre tres anchos: hombros, cintura, bajo.
+ */
+const WAIST_TAPER = 0.12
 
 /** Puntos de referencia del cuerpo, ya en píxeles de canvas. */
 export interface BodyFrame {
@@ -188,5 +203,9 @@ export function placeGarment(body: BodyFrame, fit: GarmentFit): GarmentPlacement
     // la imagen se dibuje a lo largo de ese eje.
     rotation: axisAngle - Math.PI / 2,
     offsetY: body.across * fit.verticalOffset,
+    // Curva simétrica: 1 en los extremos (hombros y bajo), mínimo en el medio
+    // (cintura). Un `sin` de medio período da esa forma sin necesitar más
+    // puntos de control que los que ya tenemos.
+    widthAt: t => 1 - WAIST_TAPER * Math.sin(Math.PI * Math.min(Math.max(t, 0), 1)),
   }
 }

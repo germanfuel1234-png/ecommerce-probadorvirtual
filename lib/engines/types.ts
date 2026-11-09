@@ -54,6 +54,13 @@ export interface TryOnEngine {
    */
   recalibrate?(): void
 
+  /**
+   * Tinta en vivo la imagen de la prenda activa. `null` vuelve al color
+   * original. Opcional porque no todos los motores componen con `<canvas>`
+   * (un motor `snapshot` remoto no tiene una imagen local que tintar).
+   */
+  setTint?(hex: string | null): void
+
   /** Libera modelos y texturas. */
   dispose(): void
 }

@@ -37,8 +37,24 @@ export function readProviderConfig(): RemoteProviderConfig | null {
   return {
     id,
     apiKey,
-    modelName: process.env.FASHN_MODEL_NAME ?? 'tryon-v1.6',
+    // `tryon-max` es el que Fashn recomienda como punto de partida ("el
+    // endpoint de prueba recomendado para la mayoría de aplicaciones");
+    // `tryon-v1.6` existe para integraciones en tiempo real sensibles al
+    // costo, que no es nuestro caso — este motor ya es `snapshot`, no hay
+    // ganancia en elegir el más barato en vez del más capaz.
+    modelName: process.env.FASHN_MODEL_NAME ?? 'tryon-max',
   }
+}
+
+/**
+ * Los modelos de Fashn no comparten nombre de campo para la prenda: `tryon-max`
+ * espera `product_image`, los modelos anteriores (`tryon-v1.6` y previos)
+ * esperan `garment_image`. Cambiar `FASHN_MODEL_NAME` sin esto haría que la
+ * prenda se ignorase en silencio — contrastado contra la documentación
+ * vigente (docs.fashn.ai/api-reference), no es una suposición.
+ */
+function garmentImageField(modelName: string): 'product_image' | 'garment_image' {
+  return modelName.startsWith('tryon-max') ? 'product_image' : 'garment_image'
 }
 
 /**
@@ -85,10 +101,13 @@ const MAX_POLLS = 60
 /**
  * Lanza una pasada en Fashn y espera el resultado.
  *
- * Contrastado con la API v1 documentada (`/v1/run` + `/v1/status/{id}`), pero
- * no se ha podido probar en vivo porque no hay API key en este entorno:
- * verifica los nombres de campo contra la documentación vigente antes de
- * confiar en esta vía en producción.
+ * Re-contrastado contra la documentación vigente de Fashn (`/v1/run` +
+ * `/v1/status/{id}`, docs.fashn.ai/api-reference) el 2026-11-08: endpoints,
+ * campos y valores de `category` coinciden. Lo único que no se puede
+ * verificar sin clave real es el comportamiento en vivo del proveedor (hoy
+ * en in_queue por tiempo real, créditos agotados, etc.) — si falla ahí,
+ * probá primero con una llamada suelta fuera de esta app antes de asumir que
+ * el bug está acá.
  */
 export async function runRemoteTryOn(
   config: RemoteProviderConfig,
@@ -108,7 +127,7 @@ export async function runRemoteTryOn(
       model_name: config.modelName,
       inputs: {
         model_image: modelImageDataUri,
-        garment_image: garmentImageDataUri,
+        [garmentImageField(config.modelName)]: garmentImageDataUri,
         category,
       },
     }),

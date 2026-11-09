@@ -173,6 +173,16 @@ describe('placeGarment', () => {
     assert.equal(wide.width, body.across * 2)
     assert.equal(placeGarment(body, LOWER_FIT).width, body.across * LOWER_FIT.widthScale)
   })
+
+  it('angosta la cintura sin tocar hombros ni bajo', () => {
+    const body = buildBodyFrame(UPRIGHT, 'upper', CANVAS, false, 0.5)!
+    const { widthAt } = placeGarment(body, UPPER_FIT)
+
+    assert.equal(widthAt(0), 1, 'a la altura de hombros no se angosta')
+    assert.equal(widthAt(1), 1, 'al bajo tampoco')
+    assert.ok(widthAt(0.5) < 1, 'a la altura de cintura sí se angosta')
+    assert.ok(widthAt(0.5) < widthAt(0.25), 'el angostamiento es máximo en el medio, no de golpe')
+  })
 })
 
 describe('smoothBodyFrame', () => {

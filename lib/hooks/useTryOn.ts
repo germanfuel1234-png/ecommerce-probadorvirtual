@@ -34,6 +34,9 @@ export interface UseTryOnResult {
   resumePreview: () => void
   /** Descarta el suavizado acumulado; el motor vuelve a fijar la prenda desde cero. */
   recalibrate: () => void
+  /** Color con el que se tiñe en vivo la prenda activa; `null` = color original. */
+  color: string | null
+  setColor: (hex: string | null) => void
   isFrozen: boolean
   isProcessing: boolean
 }
@@ -62,6 +65,7 @@ export function useTryOn({
   const [metrics, setMetrics] = useState<TryOnMetrics>(EMPTY_METRICS)
   const [isFrozen, setIsFrozen] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [color, setColorState] = useState<string | null>(null)
 
   // Las métricas se acumulan en refs: publicarlas en cada frame provocaría un
   // re-render a 30fps de todo el modal.
@@ -159,6 +163,11 @@ export function useTryOn({
     }
   }, [garment, engineReady])
 
+  // ----------------------------------------------------------- tinte color ----
+  useEffect(() => {
+    engineRef.current?.setTint?.(color)
+  }, [color, engineReady])
+
   // --------------------------------------------------------- bucle render ----
   useEffect(() => {
     if (!active || !engineReady || isFrozen) {
@@ -255,11 +264,13 @@ export function useTryOn({
   }, [active, engineReady, isFrozen])
 
   // Al cerrar el probador se descongela, o al reabrir se vería el frame viejo.
+  // El tinte también se resetea: cada apertura arranca con el color original.
   useEffect(() => {
     if (!active) {
       previewPausedRef.current = false
       setIsFrozen(false)
       setMetrics(EMPTY_METRICS)
+      setColorState(null)
     }
   }, [active])
 
@@ -314,6 +325,10 @@ export function useTryOn({
     engineRef.current?.recalibrate?.()
   }, [])
 
+  const setColor = useCallback((hex: string | null) => {
+    setColorState(hex)
+  }, [])
+
   return {
     engine,
     state,
@@ -325,6 +340,8 @@ export function useTryOn({
     captureSnapshot,
     resumePreview,
     recalibrate,
+    color,
+    setColor,
     isFrozen,
     isProcessing,
   }

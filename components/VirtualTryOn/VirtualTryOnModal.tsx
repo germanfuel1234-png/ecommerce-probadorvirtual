@@ -9,6 +9,7 @@ import type { EngineState } from '@/lib/domain/tryOn'
 import { useCamera } from '@/lib/hooks/useCamera'
 import { useTryOn } from '@/lib/hooks/useTryOn'
 import { AddToCartButton } from './AddToCartButton'
+import { ColorSwatches } from './ColorSwatches'
 import { GarmentSelector } from './GarmentSelector'
 import { TryOnStage } from './TryOnStage'
 
@@ -111,15 +112,26 @@ export function VirtualTryOnModal({ onClose, initialGarmentId }: VirtualTryOnMod
 
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 md:flex-row md:p-6">
           <div className="flex flex-1 flex-col gap-3">
-            <TryOnStage
-              videoRef={camera.videoRef}
-              canvasRef={canvasRef}
-              cameraState={camera.state}
-              cameraError={camera.error}
-              engineState={tryOn.state}
-              onRetryCamera={startCamera}
-              showGuidance={showGuidance}
-            />
+            <div className="flex flex-1 gap-3">
+              {/* El tinte en vivo es cosa del canvas local; el motor remoto no
+                  implementa `setTint` — mostrarlo ahí sería un control sin
+                  efecto. */}
+              {tryOn.garment && tryOn.engine?.mode === 'realtime' && (
+                <ColorSwatches selected={tryOn.color} onSelect={tryOn.setColor} />
+              )}
+
+              <div className="min-w-0 flex-1">
+                <TryOnStage
+                  videoRef={camera.videoRef}
+                  canvasRef={canvasRef}
+                  cameraState={camera.state}
+                  cameraError={camera.error}
+                  engineState={tryOn.state}
+                  onRetryCamera={startCamera}
+                  showGuidance={showGuidance}
+                />
+              </div>
+            </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
               <span className="inline-flex items-center gap-2">

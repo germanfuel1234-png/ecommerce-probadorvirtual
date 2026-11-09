@@ -23,5 +23,10 @@ build/
 next-env.d.ts
 *.tsbuildinfo
 
+# Certificado autofirmado para probar la cámara por HTTPS en la red local
+# (npm run dev --experimental-https). Tiene la clave privada adentro —
+# nunca se versiona — y es distinto por máquina.
+/certificates/
+
 .DS_Store
 npm-debug.log*

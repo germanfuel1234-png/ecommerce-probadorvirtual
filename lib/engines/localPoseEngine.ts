@@ -22,6 +22,7 @@ import type { ImageSegmenter, PoseLandmarker } from '@mediapipe/tasks-vision'
 import { LOCAL_ENGINE_CONFIG } from '@/lib/config/tryOn'
 import type { Garment } from '@/lib/domain/garment'
 import { drawGarment, drawVideoFrame, isVideoReady, syncCanvasSize } from './canvas'
+import { tintGarmentImage } from './colorize'
 import { OcclusionMask } from './occlusionMask'
 import { buildBodyFrame, placeGarment, smoothBodyFrame, type BodyFrame } from './poseGeometry'
 import { EngineInitError, type EngineInfo, type FrameRequest, type FrameResult, type TryOnEngine } from './types'
@@ -42,10 +43,18 @@ export class LocalPoseEngine implements TryOnEngine {
   private smoothed: BodyFrame | null = null
   private lastTimestamp = -1
   private lastSegmentTimestamp = -1
+  private frameCounter = 0
+
+  /** Media móvil del costo de un frame completo; decide si hay margen para seguir segmentando. */
+  private avgFrameMs = 0
+  private segmentationSuspended = false
 
   /** Capa aparte para poder recortar la prenda sin tocar el frame ya pintado. */
   private garmentLayer: HTMLCanvasElement | null = null
   private readonly occlusion = new OcclusionMask()
+
+  private tintColor: string | null = null
+  private tintedImage: HTMLCanvasElement | null = null
 
   async init(): Promise<void> {
     if (this.landmarker) {
@@ -83,12 +92,14 @@ export class LocalPoseEngine implements TryOnEngine {
         ...options,
         baseOptions: { modelAssetPath: LOCAL_ENGINE_CONFIG.modelPath, delegate: 'GPU' },
       })
+      console.info('[local-pose] Landmarker de pose en GPU (WebGL).')
     } catch {
       // Sin WebGL utilizable; CPU va más lento pero funciona en cualquier equipo.
       this.landmarker = await vision.PoseLandmarker.createFromOptions(fileset, {
         ...options,
         baseOptions: { modelAssetPath: LOCAL_ENGINE_CONFIG.modelPath, delegate: 'CPU' },
       })
+      console.info('[local-pose] Sin WebGL utilizable: landmarker de pose en CPU (más lento).')
     }
 
     this.garmentLayer = document.createElement('canvas')
@@ -120,13 +131,20 @@ export class LocalPoseEngine implements TryOnEngine {
     }
 
     try {
-      return await vision.ImageSegmenter.createFromOptions(fileset, segmenterOptions)
+      const segmenter = await vision.ImageSegmenter.createFromOptions(fileset, segmenterOptions)
+      console.info('[local-pose] Segmentador de oclusión en GPU (WebGL).')
+      return segmenter
     } catch {
       try {
-        return await vision.ImageSegmenter.createFromOptions(fileset, {
+        const segmenter = await vision.ImageSegmenter.createFromOptions(fileset, {
           ...segmenterOptions,
           baseOptions: { ...segmenterOptions.baseOptions, delegate: 'CPU' },
         })
+        console.info(
+          '[local-pose] Sin WebGL utilizable: segmentador de oclusión en CPU (más lento, ya corre cada ' +
+            `${LOCAL_ENGINE_CONFIG.segmentEveryNFrames} frames para compensar).`
+        )
+        return segmenter
       } catch (err) {
         console.warn('[local-pose] No se pudo iniciar el segmentador; sigue sin oclusión.', err)
         return null
@@ -140,10 +158,24 @@ export class LocalPoseEngine implements TryOnEngine {
 
     if (!garment) {
       this.garmentImage = null
+      this.tintedImage = null
       return
     }
 
     this.garmentImage = await this.loadImage(garment.imageUrl)
+    // El tinte se eligió para "lo que tengo puesto, sea lo que sea": si ya
+    // había un color activo, se re-aplica sobre la prenda nueva.
+    this.tintedImage = this.tintColor ? tintGarmentImage(this.garmentImage, this.tintColor) : null
+  }
+
+  /** Tinta en vivo la imagen activa. `null` vuelve a la foto/silueta original. */
+  setTint(hex: string | null): void {
+    this.tintColor = hex
+    this.tintedImage = hex && this.garmentImage ? tintGarmentImage(this.garmentImage, hex) : null
+  }
+
+  private get activeImage(): HTMLImageElement | HTMLCanvasElement | null {
+    return this.tintedImage ?? this.garmentImage
   }
 
   async renderFrame({ source, target, timestampMs, mirrored }: FrameRequest): Promise<FrameResult> {
@@ -171,11 +203,11 @@ export class LocalPoseEngine implements TryOnEngine {
     // válidos: acabamos de redibujar el vídeo encima, así que si saltáramos sin
     // más la prenda desaparecería durante ese frame y se vería un parpadeo.
     if (timestampMs <= this.lastTimestamp) {
-      if (this.smoothed) {
+      if (this.smoothed && this.activeImage) {
         drawGarment(
           ctx,
           placeGarment(this.smoothed, this.garment.fit),
-          this.garmentImage,
+          this.activeImage,
           LOCAL_ENGINE_CONFIG.garmentOpacity
         )
       }
@@ -208,7 +240,12 @@ export class LocalPoseEngine implements TryOnEngine {
 
     this.compositeGarment(ctx, source, placeGarment(this.smoothed, this.garment.fit), width, height, mirrored, timestampMs)
 
-    return { bodyDetected: true, latencyMs: performance.now() - startedAt }
+    const elapsed = performance.now() - startedAt
+    // Media móvil exponencial: no hace falta guardar un historial de muestras,
+    // y pesa más lo reciente — si el fps cae ahora, que reaccione ahora.
+    this.avgFrameMs = this.avgFrameMs === 0 ? elapsed : this.avgFrameMs * 0.8 + elapsed * 0.2
+
+    return { bodyDetected: true, latencyMs: elapsed }
   }
 
   /**
@@ -225,12 +262,13 @@ export class LocalPoseEngine implements TryOnEngine {
     mirrored: boolean,
     timestampMs: number
   ): void {
-    if (!this.garmentImage) {
+    const image = this.activeImage
+    if (!image) {
       return
     }
 
     if (!this.segmenter || !this.garmentLayer) {
-      drawGarment(ctx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+      drawGarment(ctx, placement, image, LOCAL_ENGINE_CONFIG.garmentOpacity)
       return
     }
 
@@ -242,25 +280,61 @@ export class LocalPoseEngine implements TryOnEngine {
 
     const layerCtx = layer.getContext('2d')
     if (!layerCtx) {
-      drawGarment(ctx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+      drawGarment(ctx, placement, image, LOCAL_ENGINE_CONFIG.garmentOpacity)
       return
     }
 
     layerCtx.clearRect(0, 0, width, height)
-    drawGarment(layerCtx, placement, this.garmentImage, LOCAL_ENGINE_CONFIG.garmentOpacity)
+    drawGarment(layerCtx, placement, image, LOCAL_ENGINE_CONFIG.garmentOpacity)
+
+    this.updateSegmentationSuspension()
+
+    // El segmentador es un segundo modelo de IA: correrlo todos los frames
+    // duplica el costo de inferencia por frame. Se actualiza cada N frames
+    // (segmentEveryNFrames) y se reaplica la última máscara calculada en los
+    // frames intermedios — barato, sólo un drawImage — así la oclusión no
+    // parpadea aunque la IA no la recalcule todos los frames. Si el equipo ya
+    // viene renqueando (`segmentationSuspended`), ni eso: se deja de pedir
+    // oclusión nueva hasta que el fps se recupere solo.
+    this.frameCounter += 1
+    const dueForSegment =
+      !this.segmentationSuspended && this.frameCounter % LOCAL_ENGINE_CONFIG.segmentEveryNFrames === 0
 
     // El segmentador tiene su propio reloj de timestamps crecientes: es un
     // modelo WASM distinto del landmarker, no comparte estado con él.
-    if (timestampMs > this.lastSegmentTimestamp) {
+    if (dueForSegment && timestampMs > this.lastSegmentTimestamp) {
       this.lastSegmentTimestamp = timestampMs
       const result = this.segmenter.segmentForVideo(source, timestampMs)
       if (result.categoryMask) {
-        this.occlusion.apply(layer, result.categoryMask, LOCAL_ENGINE_CONFIG.occludingCategories, mirrored)
+        this.occlusion.update(result.categoryMask, LOCAL_ENGINE_CONFIG.occludingCategories, mirrored, width, height)
       }
       result.close()
     }
 
+    this.occlusion.applyTo(layer)
+
     ctx.drawImage(layer, 0, 0)
+  }
+
+  /**
+   * Umbral con histéresis (apaga por encima de `perfDegradeMs`, recupera por
+   * debajo de `perfRecoverMs`, ambos distintos) para no prender y apagar la
+   * oclusión en cada frame si el costo promedio queda justo en el límite.
+   */
+  private updateSegmentationSuspension(): void {
+    if (this.avgFrameMs === 0) {
+      return // todavía no hay una muestra real de cuánto tarda un frame.
+    }
+
+    if (!this.segmentationSuspended && this.avgFrameMs > LOCAL_ENGINE_CONFIG.perfDegradeMs) {
+      this.segmentationSuspended = true
+      console.info(
+        `[local-pose] ${this.avgFrameMs.toFixed(0)}ms/frame, muy lento: oclusión desactivada sola para no empeorarlo.`
+      )
+    } else if (this.segmentationSuspended && this.avgFrameMs < LOCAL_ENGINE_CONFIG.perfRecoverMs) {
+      this.segmentationSuspended = false
+      console.info(`[local-pose] ${this.avgFrameMs.toFixed(0)}ms/frame, rendimiento recuperado: oclusión reactivada.`)
+    }
   }
 
   /** Fuerza al siguiente frame válido a fijar la prenda sin arrastrar el suavizado anterior. */
@@ -276,10 +350,16 @@ export class LocalPoseEngine implements TryOnEngine {
     this.garmentLayer = null
     this.garment = null
     this.garmentImage = null
+    this.tintedImage = null
+    this.tintColor = null
     this.imageCache.clear()
     this.smoothed = null
     this.lastTimestamp = -1
     this.lastSegmentTimestamp = -1
+    this.frameCounter = 0
+    this.avgFrameMs = 0
+    this.segmentationSuspended = false
+    this.occlusion.reset()
   }
 
   private async loadImage(src: string): Promise<HTMLImageElement> {

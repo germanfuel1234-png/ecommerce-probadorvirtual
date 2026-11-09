@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { findGarment } from '@/lib/catalog/garments'
+import { checkRateLimit, clientIpFrom } from '@/lib/server/rateLimit'
 import { garmentAsDataUri, readProviderConfig, runRemoteTryOn } from '@/lib/server/tryOnProvider'
 
 /**
@@ -28,6 +29,18 @@ export function GET() {
 const MAX_FRAME_BYTES = 8 * 1024 * 1024
 
 export async function POST(request: Request) {
+  // Cada pasada cuesta plata real (Fashn cobra por generación): antes que
+  // nada, no sea que un bot rastreando la página o un link reenviado de más
+  // se coma los créditos sin que nadie haya pedido probarse nada.
+  const rateLimit = checkRateLimit(clientIpFrom(request))
+  if (!rateLimit.allowed) {
+    const retryAfterSeconds = Math.ceil((rateLimit.retryAfterMs ?? 0) / 1000)
+    return NextResponse.json(
+      { error: 'Demasiadas pruebas en poco tiempo. Esperá un momento y volvé a intentar.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSeconds) } }
+    )
+  }
+
   const config = readProviderConfig()
 
   if (!config) {

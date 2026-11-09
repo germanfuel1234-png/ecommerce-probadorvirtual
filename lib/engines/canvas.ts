@@ -42,21 +42,70 @@ export function drawVideoFrame(
 }
 
 /**
- * Dibuja la prenda en el rectángulo orientado que ha calculado la geometría.
+ * Cuántas franjas horizontales se usan para angostar la prenda a la cintura.
+ * Esto corre todos los frames (a diferencia del segmentador, que tiene su
+ * propio freno): en equipos débiles cada `drawImage` de más pesa, así que se
+ * se mantiene bajo — igual se nota el angostamiento, sólo menos suave.
+ */
+const WARP_STRIPS = 12
+
+function naturalSize(image: HTMLImageElement | HTMLCanvasElement): { width: number; height: number } {
+  return image instanceof HTMLImageElement
+    ? { width: image.naturalWidth, height: image.naturalHeight }
+    : { width: image.width, height: image.height }
+}
+
+/**
+ * Dibuja la prenda en el rectángulo orientado que ha calculado la geometría,
+ * cortada en franjas horizontales cuyo ancho sigue `placement.widthAt` — así
+ * la imagen se angosta en la cintura en vez de quedar como un bloque recto.
+ * No es una malla real (eso pide deformar también por el eje X si el torso
+ * gira), pero a este costo (un puñado de `drawImage` más) ya se nota la
+ * diferencia contra pegar un único rectángulo.
+ *
  * La opacidad se recibe por parámetro para que este módulo no dependa de la
  * configuración de ningún motor concreto.
  */
 export function drawGarment(
   ctx: CanvasRenderingContext2D,
   placement: GarmentPlacement,
-  image: CanvasImageSource,
+  image: HTMLImageElement | HTMLCanvasElement,
   opacity = 1
 ): void {
+  const { width: srcWidth, height: srcHeight } = naturalSize(image)
+  if (srcWidth === 0 || srcHeight === 0) {
+    return
+  }
+
   ctx.save()
   ctx.globalAlpha = opacity
   ctx.translate(placement.anchor.x, placement.anchor.y)
   ctx.rotate(placement.rotation)
-  ctx.drawImage(image, -placement.width / 2, placement.offsetY, placement.width, placement.height)
+
+  const srcStripHeight = srcHeight / WARP_STRIPS
+  // Un pelo más alta que `height / WARP_STRIPS` para que no queden líneas
+  // transparentes entre franjas por redondeo de subpíxel.
+  const destStripHeight = (placement.height / WARP_STRIPS) * 1.02
+
+  for (let i = 0; i < WARP_STRIPS; i += 1) {
+    const t = (i + 0.5) / WARP_STRIPS
+    const stripWidth = placement.width * placement.widthAt(t)
+    const srcY = i * srcStripHeight
+    const destY = placement.offsetY + i * (placement.height / WARP_STRIPS)
+
+    ctx.drawImage(
+      image,
+      0,
+      srcY,
+      srcWidth,
+      srcStripHeight,
+      -stripWidth / 2,
+      destY,
+      stripWidth,
+      destStripHeight
+    )
+  }
+
   ctx.restore()
 }
 

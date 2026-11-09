@@ -64,8 +64,7 @@ export class RemoteEngine implements TryOnEngine {
     const response = await fetch('/api/try-on', { method: 'POST', body })
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => '')
-      throw new Error(detail || `El proveedor devolvió ${response.status}`)
+      throw new Error(await describeError(response))
     }
 
     const resultBlob = await response.blob()
@@ -83,6 +82,25 @@ export class RemoteEngine implements TryOnEngine {
   dispose(): void {
     this.garment = null
   }
+}
+
+/**
+ * Todos los errores de `/api/try-on` (incluido el 429 del rate limit) vienen
+ * como `{ error: string }`; sin esto se mostraba el JSON crudo como mensaje.
+ */
+async function describeError(response: Response): Promise<string> {
+  const raw = await response.text().catch(() => '')
+
+  try {
+    const parsed = JSON.parse(raw) as { error?: string }
+    if (parsed.error) {
+      return parsed.error
+    }
+  } catch {
+    // No era JSON — se usa el texto tal cual, más abajo.
+  }
+
+  return raw || `El proveedor devolvió ${response.status}`
 }
 
 export default RemoteEngine

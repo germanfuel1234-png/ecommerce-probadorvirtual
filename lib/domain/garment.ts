@@ -33,6 +33,9 @@ export interface Garment {
   description: string
   category: GarmentCategory
   color: string
+  /** Color real de la foto/silueta de base. Metadato descriptivo; el tinte en
+   * vivo del probador (ver lib/engines/colorize.ts) no depende de esto. */
+  colorHex: string
   size: GarmentSize
   /** Precio en la moneda de la tienda, en unidades (no céntimos). */
   price: number
